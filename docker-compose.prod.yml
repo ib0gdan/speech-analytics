@@ -1,0 +1,64 @@
+# Production stack for the live demo (DigitalOcean droplet, Ubuntu, >=4 GB RAM).
+# Same services as local dev + Caddy as the only public entrypoint (auto-HTTPS via sslip.io).
+# Run on the droplet:  SITE_ADDRESS=<ip>.sslip.io GROQ_API_KEY=... docker compose -f docker-compose.prod.yml up -d --build
+services:
+  caddy:
+    image: caddy:2
+    container_name: mtbank-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - SITE_ADDRESS=${SITE_ADDRESS}          # e.g. 203-0-113-5.sslip.io — Caddy gets a cert for it
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - openwebui
+      - api
+    restart: unless-stopped
+
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: mtbank-openwebui
+    environment:
+      - WEBUI_AUTH=False
+      - ENABLE_OPENAI_API=true
+      - OPENAI_API_BASE_URL=http://pipelines:9099
+      - OPENAI_API_KEY=${PIPELINES_API_KEY:-0p3n-w3bu!}
+      - WEBUI_URL=https://${SITE_ADDRESS}
+    volumes:
+      - openwebui-data:/app/backend/data
+    depends_on:
+      - pipelines
+    restart: unless-stopped
+
+  pipelines:
+    image: ghcr.io/open-webui/pipelines:main
+    container_name: mtbank-pipelines
+    environment:
+      - PIPELINES_API_KEY=${PIPELINES_API_KEY:-0p3n-w3bu!}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - LLM_BASE_URL=https://api.groq.com/openai/v1
+      - LLM_MODEL=${LLM_MODEL:-llama-3.3-70b-versatile}
+    volumes:
+      - ./pipelines:/app/pipelines
+      - ./mtbank:/app/mtbank:ro
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: mtbank-api
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - LLM_BASE_URL=https://api.groq.com/openai/v1
+      - LLM_MODEL=${LLM_MODEL:-llama-3.3-70b-versatile}
+    restart: unless-stopped
+
+volumes:
+  openwebui-data: {}
+  caddy-data: {}
+  caddy-config: {}

@@ -25,16 +25,21 @@ minimal user effort. See [[user-profile-infra]].
 ## Implementation Decisions
 
 ### Demo hosting (the crux)
-- **D-01:** Live demo host = **Hugging Face Spaces (Docker SDK)** — free, HTTPS out of the box,
-  **2 vCPU / 16 GB RAM** (the only free tier with enough RAM for whisper + OpenWebUI later),
-  git-push-to-deploy, no credit card. Rejected: Render/Railway free (≤512 MB RAM — whisper won't
-  fit, services spin down), Fly.io free (256 MB too small). A ~€4/mo VPS running the real compose
-  was rejected to honor the "free" constraint.
-- **D-02:** HF Spaces exposes **one container + one port (7860)**. So the demo image is an
-  **all-in-one Dockerfile** running three processes under a supervisor: OpenWebUI (internal 8080),
-  pipelines server (internal 9099), FastAPI (internal 8000), plus a lightweight reverse proxy
-  (Caddy or nginx) bound to 7860 that routes `/analyze` + `/api/*` → FastAPI and everything else
-  → OpenWebUI. pipelines stays internal. This is the standard HF-Spaces multi-process pattern.
+- **D-01 (REVISED 2026-07-08):** Live demo host = **DigitalOcean droplet** (Ubuntu, 4 GB RAM),
+  running the REAL `docker-compose.prod.yml` (openwebui + pipelines + api + Caddy). Free for the
+  hiring window via DO's **$200 / 60-day new-account credit**. HTTPS via **Caddy auto-TLS** using
+  a **`<ip>.sslip.io`** hostname (no domain purchase).
+  - **Why revised:** the original plan was HF Spaces (Docker SDK) but **HF moved Docker/Gradio
+    Spaces behind a PAID PRO plan** (only Static Spaces are free now — no compute) — discovered
+    when creating the Space. Static can't run OpenWebUI/pipelines/whisper, so HF is out.
+  - Rejected: Render/Railway free (≤512 MB — OpenWebUI needs ~1.5–2 GB), Oracle Always Free
+    (24 GB, forever-free, but signup friction). DO chosen: it's on the task's FAQ list, easy
+    signup, free via credit, always-on (no cold starts), runs the faithful compose.
+- **D-02 (REVISED):** No more single-container all-in-one gymnastics — the droplet runs the real
+  multi-service compose (same services as local dev). Caddy is the only public-facing service
+  (ports 80/443); it routes `/analyze` `/health` `/docs` `/openapi.json` → FastAPI and everything
+  else → OpenWebUI. pipelines stays internal. The HF all-in-one image (`deploy/hf/`) is kept as a
+  documented fallback but not used. Deploy = create droplet → run one setup script.
 
 ### Local vs demo parity
 - **D-03:** Keep BOTH: (a) `docker-compose.yml` with the three real services (openwebui +

@@ -1,0 +1,12 @@
+# Caddy auto-HTTPS. {$SITE_ADDRESS} is a real hostname (e.g. <ip>.sslip.io) so Caddy
+# provisions a Let's Encrypt cert automatically. REST paths -> FastAPI; the rest -> OpenWebUI.
+{$SITE_ADDRESS} {
+	@api path /analyze /analyze/* /health /docs /docs/* /openapi.json /redoc
+	handle @api {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		reverse_proxy openwebui:8080
+	}
+}
