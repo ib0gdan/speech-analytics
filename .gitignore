@@ -1,0 +1,36 @@
+# Secrets / env — never commit real keys
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Whisper / model caches & large artifacts
+models/
+*.ct2
+*.bin
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+
+# Claude local (keep .claude/CLAUDE.md tracked)
+.claude/settings.local.json
+
+# Logs
+*.log
