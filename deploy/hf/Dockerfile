@@ -11,8 +11,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # --- External OpenWebUI Pipelines server ---
+# Install ONLY the core server deps, not the full requirements.txt (which pulls every example
+# pipeline's provider libs — litellm/opik/langfuse/llama-index — and sends pip into a very slow
+# dependency backtrack). Our skeleton pipe needs just `requests` + the shared mtbank core.
 RUN git clone --depth 1 https://github.com/open-webui/pipelines /pipelines \
-    && pip install --no-cache-dir -r /pipelines/requirements.txt
+    && pip install --no-cache-dir \
+        "fastapi" "uvicorn[standard]" "python-multipart" "python-dotenv" \
+        "requests" "aiohttp" "pydantic" "passlib" "PyJWT" "bcrypt"
 
 # --- Project code (public repo). Bump REF / use --no-cache to redeploy latest. ---
 ARG REPO=https://github.com/ib0gdan/speech-analytics
