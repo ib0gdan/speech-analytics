@@ -1,23 +1,47 @@
 """
 title: MTBank Call Analytics
 author: ib0gdan
-description: Phase-1 skeleton pipeline — proves OpenWebUI <-> Pipelines <-> Groq (LLM backend).
-             Later phases add ASR (faster-whisper), Оператор/Клиент diarization, and the 4
-             analysis agents behind the same pipe(). For now it forwards chat to Groq so we can
-             verify the whole stack end-to-end.
+description: Phase-1 skeleton pipeline. If the message contains an audio URL, it returns the
+             full call-analysis JSON (via the shared mtbank.analysis.run_analysis core) rendered
+             as chat markdown. Otherwise it forwards the message to Groq (LLM backend check).
+             Phase 2 adds real ASR/diarization; Phase 3 adds the 4 real agents — same pipe().
 requirements: requests
 """
 
 import os
+import re
 from typing import List, Union, Generator, Iterator
 
 import requests
 from pydantic import BaseModel
 
+from mtbank.analysis import run_analysis  # shared core, mounted at /app/mtbank
+
+_AUDIO_URL_RE = re.compile(r"https?://\S+\.(?:wav|mp3|ogg|m4a|flac)", re.IGNORECASE)
+
+
+def _format_markdown(result: dict) -> str:
+    """Render the analysis contract as readable chat markdown."""
+    lines = ["## 📞 Анализ звонка" + (" _(заглушка Phase 1)_" if result.get("stub") else "")]
+    lines.append("\n### Транскрипт")
+    for seg in result["transcript"]:
+        lines.append(f"- **{seg['speaker']}** [{seg['start']:.1f}–{seg['end']:.1f}s]: {seg['text']}")
+    c = result["classification"]
+    lines.append(f"\n### Классификация\n- Тема: **{c['topic']}** · Приоритет: **{c['priority']}**")
+    q = result["quality_score"]
+    checks = " · ".join(f"{k}: {'✅' if v else '❌'}" for k, v in q["checklist"].items())
+    lines.append(f"\n### Качество: **{q['total']}/100**\n- {checks}")
+    comp = result["compliance"]
+    lines.append(f"\n### Compliance: {'✅ passed' if comp['passed'] else '❌ issues'}")
+    if comp["issues"]:
+        lines.append("\n".join(f"  - {i}" for i in comp["issues"]))
+    lines.append(f"\n### Резюме\n{result['summary']}")
+    lines.append("\n### Action items\n" + "\n".join(f"- {a}" for a in result["action_items"]))
+    return "\n".join(lines)
+
 
 class Pipeline:
     class Valves(BaseModel):
-        # All configurable live in OpenWebUI: Admin > Pipelines. Defaults come from env (.env).
         LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "https://api.groq.com/openai/v1")
         LLM_API_KEY: str = os.getenv("GROQ_API_KEY", "")
         LLM_MODEL: str = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
@@ -33,6 +57,21 @@ class Pipeline:
     async def on_shutdown(self):
         print(f"[{self.name}] on_shutdown")
 
+    def _chat_groq(self, messages: List[dict], stream: bool):
+        if not self.valves.LLM_API_KEY:
+            return ("⚠️ GROQ_API_KEY не задан. Вставьте ключ (https://console.groq.com) в `.env` "
+                    "и перезапустите: `docker compose up -d`.")
+        headers = {"Authorization": f"Bearer {self.valves.LLM_API_KEY}",
+                   "Content-Type": "application/json"}
+        payload = {"model": self.valves.LLM_MODEL, "messages": messages, "stream": stream}
+        try:
+            resp = requests.post(f"{self.valves.LLM_BASE_URL}/chat/completions",
+                                 json=payload, headers=headers, stream=stream, timeout=60)
+            resp.raise_for_status()
+            return resp.iter_lines() if stream else resp.json()["choices"][0]["message"]["content"]
+        except Exception as e:  # noqa: BLE001
+            return f"Ошибка обращения к LLM ({self.valves.LLM_MODEL}): {e}"
+
     def pipe(
         self,
         user_message: str,
@@ -40,31 +79,14 @@ class Pipeline:
         messages: List[dict],
         body: dict,
     ) -> Union[str, Generator, Iterator]:
-        if not self.valves.LLM_API_KEY:
-            return (
-                "⚠️ GROQ_API_KEY не задан.\n\n"
-                "Вставьте бесплатный ключ (https://console.groq.com) в файл `.env` "
-                "(`GROQ_API_KEY=...`) и перезапустите: `docker compose up -d`."
-            )
+        match = _AUDIO_URL_RE.search(user_message or "")
+        if match:
+            # Audio path: run the shared analysis core and render it in chat.
+            result = run_analysis(match.group(0))
+            return _format_markdown(result)
 
-        headers = {
-            "Authorization": f"Bearer {self.valves.LLM_API_KEY}",
-            "Content-Type": "application/json",
-        }
-        stream = body.get("stream", True)
-        payload = {"model": self.valves.LLM_MODEL, "messages": messages, "stream": stream}
-
-        try:
-            resp = requests.post(
-                f"{self.valves.LLM_BASE_URL}/chat/completions",
-                json=payload,
-                headers=headers,
-                stream=stream,
-                timeout=60,
-            )
-            resp.raise_for_status()
-            if stream:
-                return resp.iter_lines()               # OpenWebUI renders the streamed chunks
-            return resp.json()["choices"][0]["message"]["content"]
-        except Exception as e:  # noqa: BLE001 — surface any backend error to the chat
-            return f"Ошибка обращения к LLM ({self.valves.LLM_MODEL}): {e}"
+        # No audio URL → act as a normal assistant (also proves the Groq LLM backend).
+        if not (user_message or "").strip():
+            return ("Пришлите **ссылку на аудиофайл** звонка (wav/mp3/ogg) — верну анализ. "
+                    "Прямую загрузку файла обслуживает REST `POST /analyze`.")
+        return self._chat_groq(messages, body.get("stream", True))

@@ -1,7 +1,7 @@
 # Local dev stack for MTBank Call Analytics — Phase 1 (skeleton).
-# `docker compose up -d` brings up OpenWebUI + the external Pipelines server.
+# `docker compose up -d` brings up OpenWebUI + the external Pipelines server + the REST API.
 # OpenWebUI is pre-wired to the pipelines server as its OpenAI backend (no manual UI step).
-# The FastAPI /analyze service is added in a later step; today's goal is a working chat.
+# The Pipeline and the API share the same mtbank/ core (no duplicated logic).
 services:
   openwebui:
     image: ghcr.io/open-webui/open-webui:main
@@ -30,7 +30,25 @@ services:
       - LLM_BASE_URL=https://api.groq.com/openai/v1
       - LLM_MODEL=${LLM_MODEL:-llama-3.3-70b-versatile}
     volumes:
-      - ./pipelines:/app/pipelines        # our pipeline files load from here
+      - ./pipelines:/app/pipelines        # our pipeline entrypoints load from here
+      - ./mtbank:/app/mtbank:ro           # shared core, importable as `mtbank`
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: mtbank-api
+    ports:
+      - "8000:8000"                       # REST: http://localhost:8000  (POST /analyze, GET /health)
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - LLM_BASE_URL=https://api.groq.com/openai/v1
+      - LLM_MODEL=${LLM_MODEL:-llama-3.3-70b-versatile}
+    volumes:
+      - ./mtbank:/app/mtbank              # live-edit core without rebuild
+      - ./api:/app/api
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
 
 volumes:
