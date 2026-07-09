@@ -53,5 +53,17 @@ services:
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
 
+  # Serves test_data/ so a call recording has a URL the pipelines container can fetch.
+  # In the chat use  http://files/call_dialog.mp3  (resolved on the compose network).
+  # From your machine the same files are at  http://localhost:8899/call_dialog.mp3
+  files:
+    image: nginx:alpine
+    container_name: mtbank-files
+    ports:
+      - "8899:80"
+    volumes:
+      - ./test_data:/usr/share/nginx/html:ro
+    restart: unless-stopped
+
 volumes:
   openwebui-data: {}
