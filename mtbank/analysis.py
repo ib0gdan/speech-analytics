@@ -1,8 +1,11 @@
 """Shared analysis core — run_analysis().
 
-Phase 2: the transcript is REAL (faster-whisper + Оператор/Клиент diarization).
-Phase 3 will replace `_analyze()` with the 4 real agents; the signature and the returned
-JSON contract are unchanged, so nothing downstream has to move.
+Audio in, the task's JSON contract out. Framework-agnostic on purpose: both the OpenWebUI
+Pipeline and the FastAPI service import this one function, so the chat path and the REST path
+can never drift (CORE-01).
+
+  audio -> fetch/decode -> faster-whisper -> Оператор/Клиент diarization
+        -> supervisor fans out 4 agents (classifier, quality, compliance, summarizer) -> merge
 """
 
 from __future__ import annotations
@@ -10,6 +13,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from .agents.supervisor import run_agents
 from .asr.audio import decode_waveform, fetch_audio
 from .asr.diarizer import diarize
 from .asr.transcriber import transcribe
@@ -24,26 +28,6 @@ def _transcribe(audio_source: str | bytes, filename: str | None, request_id: str
     waveform = decode_waveform(path)
     segments = transcribe(path, request_id=request_id)
     return diarize(segments, waveform, request_id=request_id)
-
-
-def _analyze(transcript: list[dict], request_id: str) -> dict[str, Any]:
-    # Phase 3 replaces the hardcoded values below with the 4 agents' real output.
-    log_event(logger, "agents_stub", request_id=request_id, transcript_segments=len(transcript))
-    return {
-        "classification": {"topic": "кредиты", "priority": "medium"},
-        "quality_score": {
-            "total": 75,
-            "checklist": {
-                "greeting": True,
-                "need_detection": True,
-                "solution_provided": False,
-                "farewell": False,
-            },
-        },
-        "compliance": {"passed": True, "issues": []},
-        "summary": "ЗАГЛУШКА (агенты — фаза 3): резюме звонка будет здесь.",
-        "action_items": ["ЗАГЛУШКА (агенты — фаза 3)"],
-    }
 
 
 def run_analysis(
@@ -68,7 +52,7 @@ def run_analysis(
     log_event(logger, "analysis_start", request_id=rid, audio_source=src_repr)
 
     transcript = _transcribe(audio_source, filename, rid)
-    analysis = _analyze(transcript, rid)
+    analysis = run_agents(transcript, request_id=rid)
 
     result: dict[str, Any] = {
         "transcript": transcript,
