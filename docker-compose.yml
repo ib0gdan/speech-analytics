@@ -20,7 +20,9 @@ services:
     restart: unless-stopped
 
   pipelines:
-    image: ghcr.io/open-webui/pipelines:main
+    build:
+      context: .
+      dockerfile: Dockerfile.pipelines    # stock image + faster-whisper baked in
     container_name: mtbank-pipelines
     ports:
       - "9099:9099"
@@ -29,9 +31,13 @@ services:
       - GROQ_API_KEY=${GROQ_API_KEY}
       - LLM_BASE_URL=https://api.groq.com/openai/v1
       - LLM_MODEL=${LLM_MODEL:-llama-3.3-70b-versatile}
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}
+      - HF_HOME=/models
+      - PYTHONUNBUFFERED=1               # otherwise on_startup prints never reach docker logs
     volumes:
       - ./pipelines:/app/pipelines        # our pipeline entrypoints load from here
       - ./mtbank:/app/mtbank:ro           # shared core, importable as `mtbank`
+      - whisper-models:/models            # model cache survives restarts
     restart: unless-stopped
 
   api:
@@ -45,7 +51,11 @@ services:
       - GROQ_API_KEY=${GROQ_API_KEY}
       - LLM_BASE_URL=https://api.groq.com/openai/v1
       - LLM_MODEL=${LLM_MODEL:-llama-3.3-70b-versatile}
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}
+      - HF_HOME=/models
+      - PYTHONUNBUFFERED=1
     volumes:
+      - whisper-models:/models            # model cache shared with pipelines, survives restarts
       - ./mtbank:/app/mtbank              # live-edit core without rebuild
       - ./api:/app/api
       - ./tests:/app/tests                # `docker compose exec api pytest`
@@ -68,3 +78,4 @@ services:
 
 volumes:
   openwebui-data: {}
+  whisper-models: {}

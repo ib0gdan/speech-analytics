@@ -4,8 +4,12 @@ author: ib0gdan
 description: If the message contains an audio URL, the pipe transcribes the call
              (faster-whisper + Оператор/Клиент diarization) and returns the full analysis
              rendered as chat markdown, via the shared mtbank.analysis.run_analysis core.
-             Otherwise it forwards the message to Groq. Phase 3 adds the 4 real agents.
-requirements: requests, faster-whisper, numpy
+             Otherwise it forwards the message to Groq.
+             NOTE: `requirements:` above must stay a bare package list — the pipelines
+             server feeds the whole line to pip, so an inline comment breaks the install
+             and the server then quarantines this file into pipelines/failed/.
+             faster-whisper and numpy are baked into Dockerfile.pipelines instead.
+requirements: requests
 """
 
 import os
@@ -60,6 +64,18 @@ class Pipeline:
     async def on_startup(self):
         status = "OK" if self.valves.LLM_API_KEY else "NO GROQ_API_KEY"
         print(f"[{self.name}] on_startup — model={self.valves.LLM_MODEL} key={status}")
+
+        # Load whisper now, not on the first user's request: on a cold container that cost 70s
+        # and blew the 60s response budget for whoever happened to be first.
+        os.environ.setdefault("WHISPER_MODEL", self.valves.WHISPER_MODEL)
+        os.environ.setdefault("WHISPER_COMPUTE_TYPE", self.valves.WHISPER_COMPUTE_TYPE)
+        try:
+            from mtbank.asr.transcriber import warmup
+
+            warmup()
+            print(f"[{self.name}] whisper '{self.valves.WHISPER_MODEL}' preloaded")
+        except Exception as e:  # noqa: BLE001 — a warm-up failure must never block startup
+            print(f"[{self.name}] whisper preload failed: {e}")
 
     async def on_shutdown(self):
         print(f"[{self.name}] on_shutdown")

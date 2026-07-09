@@ -8,17 +8,31 @@ upload or a JSON/form `url`.
 from __future__ import annotations
 
 import time
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 
 from mtbank import __version__
 from mtbank.analysis import run_analysis
+from mtbank.asr.transcriber import warmup
 from mtbank.errors import AnalysisError
 from mtbank.logging_config import get_logger, log_event
 
 logger = get_logger("mtbank.api")
 
-app = FastAPI(title="MTBank Call Analytics API", version=__version__)
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # Preload whisper so the first /analyze call doesn't pay the model download (~70 s cold).
+    try:
+        warmup()
+        log_event(logger, "whisper_preloaded")
+    except Exception as e:  # noqa: BLE001 — a warm-up failure must not stop the service
+        log_event(logger, "whisper_preload_failed", error=str(e)[:200])
+    yield
+
+
+app = FastAPI(title="MTBank Call Analytics API", version=__version__, lifespan=lifespan)
 
 
 @app.get("/health")

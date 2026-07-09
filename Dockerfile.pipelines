@@ -1,0 +1,18 @@
+# OpenWebUI Pipelines server + our ASR/agent dependencies baked in.
+#
+# The stock image installs a pipeline's `requirements:` at LOAD time. For faster-whisper that
+# means a ~100 MB dependency tree downloaded on every container start — slow, and twice it hit a
+# corrupted wheel (pip hash mismatch) which silently left the module unimportable
+# ("No Pipeline class found"). Pinning them into the image makes startup deterministic.
+FROM ghcr.io/open-webui/pipelines:main
+
+USER root
+
+COPY api/requirements.txt /tmp/asr-requirements.txt
+RUN pip install --no-cache-dir --retries 5 --timeout 60 \
+        faster-whisper==1.1.1 numpy==2.2.1 requests==2.32.3 \
+    && rm -f /tmp/asr-requirements.txt
+
+# Whisper models land here; docker-compose mounts a shared volume so they survive restarts
+# and api/pipelines download them only once.
+ENV HF_HOME=/models

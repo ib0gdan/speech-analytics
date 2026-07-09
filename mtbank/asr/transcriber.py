@@ -41,6 +41,16 @@ def _get_model():
     return _model
 
 
+def warmup() -> None:
+    """Download and load the model at service startup.
+
+    Otherwise the FIRST user request pays for a ~500 MB download plus model init — on a cold
+    container that measured 70 s, blowing the 60 s response budget for whoever happens to be
+    first. Called from the Pipeline's on_startup and the API's lifespan.
+    """
+    _get_model()
+
+
 def transcribe(path: Path, *, language: str = "ru", request_id: str = "-") -> list[dict]:
     """Return segments: [{start, end, text}, ...] (speaker is assigned by the diarizer)."""
     model = _get_model()
