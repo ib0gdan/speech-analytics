@@ -50,6 +50,7 @@ services:
       - ./api:/app/api
       - ./tests:/app/tests                # `docker compose exec api pytest`
       - ./test_data:/app/test_data        # fixtures for the slow real-ASR test
+      - ./scripts:/app/scripts:ro         # eval_wer.py etc, always current
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
 

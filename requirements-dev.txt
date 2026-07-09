@@ -1,3 +1,7 @@
 # Test-only dependencies. Installed into the api image so `docker compose exec api pytest` works.
 pytest==8.3.4
 httpx==0.28.1          # required by fastapi.testclient
+
+# WER evaluation (scripts/eval_wer.py)
+jiwer==3.1.0
+num2words==0.5.14      # spell out digits so formatting differences don't inflate WER
