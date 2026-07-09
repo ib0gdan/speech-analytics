@@ -3,3 +3,7 @@ uvicorn[standard]==0.34.0
 python-multipart==0.0.20
 pydantic==2.10.4
 requests==2.32.3
+# ASR — faster-whisper brings ctranslate2 (int8 CPU inference), PyAV (ffmpeg decoding)
+# and onnxruntime (built-in Silero VAD). numpy powers our pyannote-free diarizer.
+faster-whisper==1.1.1
+numpy==2.2.1

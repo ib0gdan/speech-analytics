@@ -4,7 +4,9 @@ FROM python:3.11-slim
 WORKDIR /app
 
 COPY api/requirements.txt /app/api/requirements.txt
-RUN pip install --no-cache-dir -r /app/api/requirements.txt
+# --retries guards against flaky wheel downloads (we hit a corrupted flatbuffers wheel once).
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir --retries 5 --timeout 60 -r /app/api/requirements.txt
 
 COPY mtbank /app/mtbank
 COPY api /app/api

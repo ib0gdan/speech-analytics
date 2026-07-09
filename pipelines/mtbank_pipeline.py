@@ -1,11 +1,11 @@
 """
 title: MTBank Call Analytics
 author: ib0gdan
-description: Phase-1 skeleton pipeline. If the message contains an audio URL, it returns the
-             full call-analysis JSON (via the shared mtbank.analysis.run_analysis core) rendered
-             as chat markdown. Otherwise it forwards the message to Groq (LLM backend check).
-             Phase 2 adds real ASR/diarization; Phase 3 adds the 4 real agents — same pipe().
-requirements: requests
+description: If the message contains an audio URL, the pipe transcribes the call
+             (faster-whisper + Оператор/Клиент diarization) and returns the full analysis
+             rendered as chat markdown, via the shared mtbank.analysis.run_analysis core.
+             Otherwise it forwards the message to Groq. Phase 3 adds the 4 real agents.
+requirements: requests, faster-whisper, numpy
 """
 
 import os
@@ -16,13 +16,17 @@ import requests
 from pydantic import BaseModel
 
 from mtbank.analysis import run_analysis  # shared core, mounted at /app/mtbank
+from mtbank.errors import AnalysisError
 
 _AUDIO_URL_RE = re.compile(r"https?://\S+\.(?:wav|mp3|ogg|m4a|flac)", re.IGNORECASE)
 
 
 def _format_markdown(result: dict) -> str:
     """Render the analysis contract as readable chat markdown."""
-    lines = ["## 📞 Анализ звонка" + (" _(заглушка Phase 1)_" if result.get("stub") else "")]
+    header = "## 📞 Анализ звонка"
+    if result.get("elapsed_s") is not None:
+        header += f" _(обработка {result['elapsed_s']} с)_"
+    lines = [header]
     lines.append("\n### Транскрипт")
     for seg in result["transcript"]:
         lines.append(f"- **{seg['speaker']}** [{seg['start']:.1f}–{seg['end']:.1f}s]: {seg['text']}")
@@ -45,6 +49,9 @@ class Pipeline:
         LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "https://api.groq.com/openai/v1")
         LLM_API_KEY: str = os.getenv("GROQ_API_KEY", "")
         LLM_MODEL: str = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
+        # ASR: `small` int8 keeps a 5-min call under the 60s budget on CPU; `medium` overshoots.
+        WHISPER_MODEL: str = os.getenv("WHISPER_MODEL", "small")
+        WHISPER_COMPUTE_TYPE: str = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
 
     def __init__(self):
         self.name = "MTBank Call Analytics"
@@ -82,7 +89,12 @@ class Pipeline:
         match = _AUDIO_URL_RE.search(user_message or "")
         if match:
             # Audio path: run the shared analysis core and render it in chat.
-            result = run_analysis(match.group(0))
+            os.environ.setdefault("WHISPER_MODEL", self.valves.WHISPER_MODEL)
+            os.environ.setdefault("WHISPER_COMPUTE_TYPE", self.valves.WHISPER_COMPUTE_TYPE)
+            try:
+                result = run_analysis(match.group(0))
+            except AnalysisError as e:
+                return f"❌ {e.message}"
             return _format_markdown(result)
 
         # No audio URL → act as a normal assistant (also proves the Groq LLM backend).

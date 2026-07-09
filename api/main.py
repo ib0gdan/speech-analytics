@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException, Request
 
 from mtbank import __version__
 from mtbank.analysis import run_analysis
+from mtbank.errors import AnalysisError
 from mtbank.logging_config import get_logger, log_event
 
 logger = get_logger("mtbank.api")
@@ -22,16 +23,17 @@ app = FastAPI(title="MTBank Call Analytics API", version=__version__)
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "service": "mtbank-api", "version": __version__, "stub": True}
+    return {"status": "ok", "service": "mtbank-api", "version": __version__}
 
 
 @app.post("/analyze")
 async def analyze(request: Request) -> dict:
-    """Analyze a call. Body: multipart `file` (and/or `url`), OR JSON `{"url": "..."}`."""
+    """Analyze a call. Body: multipart `file` (or `url`), OR JSON `{"url": "..."}`."""
     rid = f"api-{int(time.time() * 1000)}"
     content_type = request.headers.get("content-type", "")
     url: str | None = None
     filename: str | None = None
+    payload: bytes | None = None
 
     if content_type.startswith("application/json"):
         try:
@@ -45,19 +47,21 @@ async def analyze(request: Request) -> dict:
         upload = form.get("file")
         if upload is not None and hasattr(upload, "filename"):
             filename = upload.filename
+            payload = await upload.read()
     else:
         raise HTTPException(
             status_code=415,
             detail="Use multipart/form-data (file/url) or application/json ({\"url\": ...}).",
         )
 
-    if not url and not filename:
+    if not url and not payload:
         raise HTTPException(status_code=400, detail="Provide an audio `file` or a `url`.")
 
-    audio_source = url or filename
     log_event(logger, "analyze_request", request_id=rid,
-              has_file=filename is not None, url=url, content_type=content_type)
+              has_file=payload is not None, url=url, content_type=content_type)
 
-    # Phase 1 skeleton: audio is not downloaded/transcribed yet — the contract is what matters.
-    result = run_analysis(audio_source, request_id=rid)
-    return result
+    try:
+        return run_analysis(payload or url, filename=filename, request_id=rid)
+    except AnalysisError as e:
+        log_event(logger, "analyze_failed", request_id=rid, code=e.code, error=e.message)
+        raise HTTPException(status_code=400, detail={"code": e.code, "message": e.message})
