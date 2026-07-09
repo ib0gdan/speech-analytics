@@ -48,6 +48,8 @@ services:
     volumes:
       - ./mtbank:/app/mtbank              # live-edit core without rebuild
       - ./api:/app/api
+      - ./tests:/app/tests                # `docker compose exec api pytest`
+      - ./test_data:/app/test_data        # fixtures for the slow real-ASR test
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
 

@@ -35,6 +35,7 @@ def run_analysis(
     *,
     filename: str | None = None,
     request_id: str | None = None,
+    llm: Any = None,
 ) -> dict[str, Any]:
     """Analyze one call recording and return the full contract dict.
 
@@ -42,6 +43,7 @@ def run_analysis(
         audio_source: audio URL, local path, or raw bytes.
         filename: original name (used for the extension when `audio_source` is bytes).
         request_id: correlation id for the JSON logs; generated if omitted.
+        llm: optional LLM client override (tests inject a fake; production builds its own).
 
     Raises:
         AnalysisError: user-facing failure (bad URL, undecodable file, no speech).
@@ -52,7 +54,7 @@ def run_analysis(
     log_event(logger, "analysis_start", request_id=rid, audio_source=src_repr)
 
     transcript = _transcribe(audio_source, filename, rid)
-    analysis = run_agents(transcript, request_id=rid)
+    analysis = run_agents(transcript, llm, request_id=rid)
 
     result: dict[str, Any] = {
         "transcript": transcript,

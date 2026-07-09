@@ -1,0 +1,3 @@
+# Test-only dependencies. Installed into the api image so `docker compose exec api pytest` works.
+pytest==8.3.4
+httpx==0.28.1          # required by fastapi.testclient
