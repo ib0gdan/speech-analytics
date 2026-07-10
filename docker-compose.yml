@@ -83,6 +83,20 @@ services:
       - ./test_data:/usr/share/nginx/html:ro
     restart: unless-stopped
 
+  # One public port for the Cloudflare Tunnel (which can publish only one).
+  # Chat and REST behind a single origin, mirroring the prod Caddy split.
+  proxy:
+    image: nginx:alpine
+    container_name: mtbank-proxy
+    ports:
+      - "8080:80"
+    volumes:
+      - ./deploy/local/nginx-tunnel.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - openwebui
+      - api
+    restart: unless-stopped
+
 volumes:
   openwebui-data: {}
   whisper-models: {}
