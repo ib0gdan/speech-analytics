@@ -1,7 +1,11 @@
 # Caddy auto-HTTPS. {$SITE_ADDRESS} is a real hostname (e.g. <ip>.sslip.io) so Caddy
 # provisions a Let's Encrypt cert automatically. REST paths -> FastAPI; the rest -> OpenWebUI.
 {$SITE_ADDRESS} {
-	@api path /analyze /analyze/* /health /docs /docs/* /openapi.json /redoc
+	# `/analyze /analyze/*` was too narrow: it missed /analyze-batch (Bonus-A batch endpoint),
+	# which fell through to the OpenWebUI catch-all below. `/analyze*` is a Caddy glob covering
+	# the whole /analyze family (including /analyze-batch and any future /analyze-*) in one
+	# token — mirrors the nginx-tunnel.conf prefix-match fix for the local/dev proxy.
+	@api path /analyze* /health /docs /docs/* /openapi.json /redoc
 	handle @api {
 		reverse_proxy api:8000
 	}
