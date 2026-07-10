@@ -41,16 +41,23 @@ services:
     restart: unless-stopped
 
   pipelines:
-    image: ghcr.io/open-webui/pipelines:main
+    build:
+      context: .
+      dockerfile: Dockerfile.pipelines    # faster-whisper baked in; the stock image installs it
+                                          # at load time and quarantines the pipeline if pip fails
     container_name: mtbank-pipelines
     environment:
       - PIPELINES_API_KEY=${PIPELINES_API_KEY:-0p3n-w3bu!}
       - GROQ_API_KEY=${GROQ_API_KEY}
       - LLM_BASE_URL=https://api.groq.com/openai/v1
       - LLM_MODEL=${LLM_MODEL:-llama-3.3-70b-versatile}
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}
+      - HF_HOME=/models
+      - PYTHONUNBUFFERED=1
     volumes:
       - ./pipelines:/app/pipelines
       - ./mtbank:/app/mtbank:ro
+      - whisper-models:/models            # download the model once, survive restarts
     restart: unless-stopped
 
   api:
@@ -62,9 +69,15 @@ services:
       - GROQ_API_KEY=${GROQ_API_KEY}
       - LLM_BASE_URL=https://api.groq.com/openai/v1
       - LLM_MODEL=${LLM_MODEL:-llama-3.3-70b-versatile}
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}
+      - HF_HOME=/models
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - whisper-models:/models
     restart: unless-stopped
 
 volumes:
   openwebui-data: {}
   caddy-data: {}
   caddy-config: {}
+  whisper-models: {}
