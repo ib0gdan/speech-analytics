@@ -1,0 +1,11 @@
+# Fixed uid so deploy/grafana/dashboards/mtbank.json can reference it deterministically —
+# no manual "pick a data source" step for the reviewer.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    uid: prometheus
+    isDefault: true
