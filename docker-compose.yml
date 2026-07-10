@@ -121,6 +121,15 @@ services:
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true   # anonymous read-only viewer for the demo (T-nc0-02)
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      # Exposed at /grafana/ through the tunnel proxy (BONUS-B-GRAFANA-tunnel). Grafana then emits
+      # <base href="/grafana/"> plus relative asset paths, so every asset anchors under
+      # /grafana/public/... regardless of the Host header the tunnel forwards (proven live: a
+      # foreign Host still renders 200 with zero bare /public/ refs). The root_url HOST below is
+      # therefore cosmetic — it is only used for the bare-`/` redirect, which the tunnel never
+      # routes to Grafana (nginx sends bare `/` to OpenWebUI). 3001 is the host-mapped direct port,
+      # so a stale bare :3001/ bookmark self-heals via a 301 to :3001/grafana/.
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - GF_SERVER_ROOT_URL=http://localhost:3001/grafana/
     volumes:
       - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
