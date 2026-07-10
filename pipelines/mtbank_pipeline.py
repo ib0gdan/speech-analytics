@@ -20,6 +20,7 @@ import requests
 from pydantic import BaseModel
 
 from mtbank.analysis import run_analysis  # shared core, mounted at /app/mtbank
+from mtbank.batch import run_batch_analysis
 from mtbank.errors import AnalysisError
 
 _AUDIO_URL_RE = re.compile(r"https?://\S+\.(?:wav|mp3|ogg|m4a|flac)", re.IGNORECASE)
@@ -69,6 +70,82 @@ def _format_markdown(result: dict) -> str:
 
     if result.get("agent_errors"):
         lines.append("\n> ⚠️ Часть агентов не отработала: " + "; ".join(result["agent_errors"]))
+    return "\n".join(lines)
+
+
+def _format_trends_markdown(batch_result: dict) -> str:
+    """Render run_batch_analysis()'s output as chat markdown (BONUS-A-TRENDS).
+
+    Same split as the single-call report: everything under "Агрегаты" is code-computed
+    (mtbank.agents.trends.compute_aggregates), the rest is the LLM's judgement.
+    """
+    t = batch_result.get("trends", {})
+    header = f"## 📊 Тренды по {t.get('num_calls', 0)} звонкам"
+    if batch_result.get("elapsed_s") is not None:
+        header += f" _(обработка {batch_result['elapsed_s']} с)_"
+    lines = [header]
+
+    topics = t.get("topics", {})
+    topics_str = " · ".join(f"{topic}: {n}" for topic, n in topics.items()) or "нет данных"
+    lines.append(f"\n### Темы обращений\n- {topics_str}")
+
+    q = t.get("quality", {})
+    lines.append(
+        f"\n### Качество обслуживания\n"
+        f"- Среднее: **{q.get('avg')}** · Мин: **{q.get('min')}** · Макс: **{q.get('max')}**"
+    )
+
+    pass_rate = t.get("checklist_pass_rate", {})
+    if pass_rate:
+        checks = " · ".join(
+            f"{_CHECKLIST_RU.get(k, k)}: {round(v * 100)}%" for k, v in pass_rate.items()
+        )
+        lines.append(f"\n### Выполнение чеклиста по звонкам\n- {checks}")
+
+    failure_rate = t.get("compliance_failure_rate", 0.0)
+    lines.append(f"\n### Комплаенс\n- Доля звонков с нарушениями: **{round(failure_rate * 100)}%**")
+    hits = t.get("forbidden_phrase_hits", {})
+    if hits:
+        hits_str = "\n".join(f"  - {phrase}: {n}" for phrase, n in hits.items())
+        lines.append(f"- Частота запрещённых фраз:\n{hits_str}")
+
+    patterns = t.get("patterns", [])
+    if patterns:
+        lines.append("\n### Паттерны\n" + "\n".join(f"- {p}" for p in patterns))
+    causes = t.get("causes", [])
+    if causes:
+        lines.append("\n### Вероятные причины\n" + "\n".join(f"- {c}" for c in causes))
+    recommendations = t.get("recommendations", [])
+    if recommendations:
+        lines.append("\n### Рекомендации\n" + "\n".join(f"- {r}" for r in recommendations))
+    grouped_items = t.get("grouped_action_items", [])
+    if grouped_items:
+        lines.append("\n### Сгруппированные задачи\n" + "\n".join(f"- {a}" for a in grouped_items))
+    grouped_issues = t.get("grouped_compliance_issues", [])
+    if grouped_issues:
+        lines.append(
+            "\n### Сгруппированные нарушения комплаенса\n"
+            + "\n".join(f"- {i}" for i in grouped_issues)
+        )
+
+    calls = batch_result.get("calls", [])
+    if calls:
+        call_lines = []
+        for call in calls:
+            c = call.get("classification", {})
+            q_total = call.get("quality_score", {}).get("total")
+            comp_passed = call.get("compliance", {}).get("passed", True)
+            call_lines.append(
+                f"- {c.get('topic', 'другое')} · качество {q_total} · "
+                f"комплаенс {'✅' if comp_passed else '❌'}"
+            )
+        lines.append("\n### Звонки\n" + "\n".join(call_lines))
+
+    errors = batch_result.get("errors", [])
+    if errors:
+        err_str = "; ".join(f"{e.get('source')}: {e.get('message')}" for e in errors)
+        lines.append(f"\n> ⚠️ Не удалось проанализировать {len(errors)} источник(ов): {err_str}")
+
     return "\n".join(lines)
 
 
@@ -126,13 +203,25 @@ class Pipeline:
         messages: List[dict],
         body: dict,
     ) -> Union[str, Generator, Iterator]:
-        match = _AUDIO_URL_RE.search(user_message or "")
-        if match:
-            # Audio path: run the shared analysis core and render it in chat.
+        # Dedupe preserving order — a URL pasted twice by accident is still a single-call message.
+        urls = list(dict.fromkeys(_AUDIO_URL_RE.findall(user_message or "")))
+
+        if len(urls) > 1:
+            # Batch path: >1 distinct audio URL -> run_batch_analysis + trends report.
             os.environ.setdefault("WHISPER_MODEL", self.valves.WHISPER_MODEL)
             os.environ.setdefault("WHISPER_COMPUTE_TYPE", self.valves.WHISPER_COMPUTE_TYPE)
             try:
-                result = run_analysis(match.group(0))
+                batch_result = run_batch_analysis(urls)
+            except AnalysisError as e:
+                return f"❌ {e.message}"
+            return _format_trends_markdown(batch_result)
+
+        if len(urls) == 1:
+            # Single-call path: UNCHANGED behaviour.
+            os.environ.setdefault("WHISPER_MODEL", self.valves.WHISPER_MODEL)
+            os.environ.setdefault("WHISPER_COMPUTE_TYPE", self.valves.WHISPER_COMPUTE_TYPE)
+            try:
+                result = run_analysis(urls[0])
             except AnalysisError as e:
                 return f"❌ {e.message}"
             return _format_markdown(result)

@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException, Request
 from mtbank import __version__
 from mtbank.analysis import run_analysis
 from mtbank.asr.transcriber import warmup
+from mtbank.batch import run_batch_analysis
 from mtbank.errors import AnalysisError
 from mtbank.logging_config import get_logger, log_event
 
@@ -78,4 +79,45 @@ async def analyze(request: Request) -> dict:
         return run_analysis(payload or url, filename=filename, request_id=rid)
     except AnalysisError as e:
         log_event(logger, "analyze_failed", request_id=rid, code=e.code, error=e.message)
+        raise HTTPException(status_code=400, detail={"code": e.code, "message": e.message})
+
+
+@app.post("/analyze-batch")
+async def analyze_batch(request: Request) -> dict:
+    """Analyze several calls and surface trends (BONUS-A-TRENDS).
+
+    Body: JSON `{"urls": [...]}`, OR multipart with repeated `files` fields plus optional `urls`.
+    """
+    rid = f"api-batch-{int(time.time() * 1000)}"
+    content_type = request.headers.get("content-type", "")
+    sources: list = []
+
+    if content_type.startswith("application/json"):
+        try:
+            body = await request.json()
+        except Exception:  # noqa: BLE001
+            raise HTTPException(status_code=400, detail="Invalid JSON body.")
+        sources.extend(u for u in (body or {}).get("urls", []) if u)
+    elif content_type.startswith("multipart/form-data"):
+        form = await request.form()
+        sources.extend(u for u in form.getlist("urls") if u)
+        for upload in form.getlist("files"):
+            if hasattr(upload, "filename"):
+                sources.append((await upload.read(), upload.filename))
+    else:
+        raise HTTPException(
+            status_code=415,
+            detail="Use multipart/form-data (files/urls) or application/json ({\"urls\": [...]}).",
+        )
+
+    if not sources:
+        raise HTTPException(status_code=400, detail="Provide at least one audio `files` or `urls`.")
+
+    log_event(logger, "analyze_batch_request", request_id=rid,
+              num_sources=len(sources), content_type=content_type)
+
+    try:
+        return run_batch_analysis(sources, request_id=rid)
+    except AnalysisError as e:
+        log_event(logger, "analyze_batch_failed", request_id=rid, code=e.code, error=e.message)
         raise HTTPException(status_code=400, detail={"code": e.code, "message": e.message})
