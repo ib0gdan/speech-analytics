@@ -60,6 +60,45 @@ def test_compliance_failure_increments_compliance_failed_total(monkeypatch, good
     assert _sample("mtbank_compliance_failed_total") - before == 1
 
 
+def test_degraded_agent_does_not_pollute_quality_or_topic(monkeypatch, good_transcript):
+    """A dead LLM must not be reported as `quality=0, topic=другое` — that is a lying metric.
+
+    The unknown score stays unknown (histogram count unchanged); the degradation is surfaced on
+    mtbank_agent_failed_total instead.
+    """
+    llm = FakeLLM(fail=("classifier", "quality"))
+    monkeypatch.setattr("mtbank.analysis._transcribe", lambda *a, **kw: good_transcript)
+
+    before_calls = _sample("mtbank_calls_total")
+    before_quality_count = _sample("mtbank_quality_score_count")
+    before_topic = _sample("mtbank_topic_total", {"topic": "другое"})
+    before_failed = _sample("mtbank_agent_failed_total", {"agent": "quality"})
+
+    result = run_analysis(b"x", llm=llm)
+    assert result["quality_score"]["total"] == 0          # the fallback really did fire
+    assert result["classification"]["topic"] == "другое"
+
+    assert _sample("mtbank_calls_total") - before_calls == 1               # the call happened
+    assert _sample("mtbank_quality_score_count") - before_quality_count == 0   # but 0 is not data
+    assert _sample("mtbank_topic_total", {"topic": "другое"}) - before_topic == 0
+    assert _sample("mtbank_agent_failed_total", {"agent": "quality"}) - before_failed == 1
+
+
+def test_compliance_fallback_is_not_counted_as_a_compliance_failure(monkeypatch, good_transcript):
+    """compliance.fallback() returns passed=True, so it cannot inflate failures — but a degraded
+    compliance agent must still not be silently treated as a clean call."""
+    llm = FakeLLM(fail=("compliance",))
+    monkeypatch.setattr("mtbank.analysis._transcribe", lambda *a, **kw: good_transcript)
+
+    before_failures = _sample("mtbank_compliance_failed_total")
+    before_degraded = _sample("mtbank_agent_failed_total", {"agent": "compliance"})
+
+    run_analysis(b"x", llm=llm)
+
+    assert _sample("mtbank_compliance_failed_total") - before_failures == 0
+    assert _sample("mtbank_agent_failed_total", {"agent": "compliance"}) - before_degraded == 1
+
+
 def test_metrics_endpoint_serves_prometheus_exposition_format():
     resp = client.get("/metrics")
 

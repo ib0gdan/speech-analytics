@@ -36,6 +36,9 @@ except ImportError:  # pragma: no cover — exercised only if the dependency is 
 # label cardinality bounded (design C — never request_id/url/filename as a label).
 _TOPICS = ("кредиты", "карты", "переводы", "жалобы", "другое")
 
+# Bounded label set, mirroring the agent modules' NAME constants.
+_AGENTS = ("classifier", "quality", "compliance", "summarizer")
+
 if _ENABLED:
     CALLS_TOTAL = Counter("mtbank_calls_total", "Total analyzed calls (chat + REST + batch).")
     TOPIC_TOTAL = Counter(
@@ -43,6 +46,9 @@ if _ENABLED:
     )
     COMPLIANCE_FAILED_TOTAL = Counter(
         "mtbank_compliance_failed_total", "Calls where the compliance layer failed."
+    )
+    AGENT_FAILED_TOTAL = Counter(
+        "mtbank_agent_failed_total", "Calls where an agent degraded to its fallback.", ["agent"]
     )
     # Score support is the discrete set {0,20,30,40,50,60,70,80,100} (fixed weights
     # 20/30/30/20) — a Histogram's bucket counters sum across the two scrape targets, unlike a
@@ -57,20 +63,41 @@ if _ENABLED:
     )
 
 
+def _failed_agents(result: dict[str, Any]) -> set[str]:
+    """Agents that degraded to their fallback, from the supervisor's `f"{NAME}: {error}"` list."""
+    failed = {str(e).split(":", 1)[0].strip() for e in result.get("agent_errors", [])}
+    return failed & set(_AGENTS)
+
+
 def record_analysis(result: dict[str, Any], duration_s: float) -> None:
-    """Increment/observe metrics from a full run_analysis() result. Never mutates `result`."""
+    """Increment/observe metrics from a full run_analysis() result. Never mutates `result`.
+
+    A degraded agent's fallback is NOT data. `quality.fallback()` returns total=0 and
+    `classifier.fallback()` returns "другое" — recording those would report a dead LLM as
+    "operators scored 0" and inflate the "другое" topic, i.e. the metric would lie precisely
+    when the system is unhealthy. So a failed agent's slice is SKIPPED and surfaced on
+    `mtbank_agent_failed_total` instead: an unknown score stays unknown, and the gap between
+    `mtbank_calls_total` and `mtbank_quality_score_count` is exactly the degradation.
+    """
     if not _ENABLED:
         return
 
+    failed = _failed_agents(result)
     CALLS_TOTAL.inc()
+    for agent in failed:
+        AGENT_FAILED_TOTAL.labels(agent=agent).inc()
 
-    topic = result.get("classification", {}).get("topic")
-    TOPIC_TOTAL.labels(topic=topic if topic in _TOPICS else "другое").inc()
+    if "classifier" not in failed:
+        topic = result.get("classification", {}).get("topic")
+        TOPIC_TOTAL.labels(topic=topic if topic in _TOPICS else "другое").inc()
 
-    if result.get("compliance", {}).get("passed") is False:
+    if "compliance" not in failed and result.get("compliance", {}).get("passed") is False:
         COMPLIANCE_FAILED_TOTAL.inc()
 
-    QUALITY_SCORE.observe(result.get("quality_score", {}).get("total", 0))
+    if "quality" not in failed:
+        QUALITY_SCORE.observe(result.get("quality_score", {}).get("total", 0))
+
+    # The wall-clock is measured by us, not by an agent — always real, always recorded.
     ANALYSIS_DURATION_SECONDS.observe(duration_s)
 
 
