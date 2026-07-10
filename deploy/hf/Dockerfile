@@ -64,6 +64,7 @@ RUN ARCH="$(dpkg --print-architecture)" \
 # (the HF app_port). Forcing a shared PORT would make them fight over one port.
 ENV PYTHONPATH=/opt/app \
     WEBUI_AUTH=False \
+    DEFAULT_USER_ROLE=admin \
     ENABLE_OPENAI_API=true \
     OPENAI_API_BASE_URL=http://127.0.0.1:9099 \
     OPENAI_API_KEY=0p3n-w3bu! \
