@@ -33,8 +33,9 @@ pipelines/failed/          # server quarantines a pipeline here if it fails to i
 Thumbs.db
 *.swp
 
-# Claude local (keep .claude/CLAUDE.md tracked)
-.claude/settings.local.json
+# Internal planning/agent scaffolding — process artifacts, not part of the deliverable
+.planning/
+.claude/
 
 # Logs
 *.log
