@@ -24,27 +24,51 @@ from mtbank.errors import AnalysisError
 
 _AUDIO_URL_RE = re.compile(r"https?://\S+\.(?:wav|mp3|ogg|m4a|flac)", re.IGNORECASE)
 
+# Chat-only labels. The JSON contract returned by /analyze keeps its English keys — the task
+# fixes that schema (quality_score.checklist.greeting, ...), so only the rendering is localised.
+_PRIORITY_RU = {"low": "низкий", "medium": "средний", "high": "высокий"}
+_CHECKLIST_RU = {
+    "greeting": "приветствие",
+    "need_detection": "выявление потребности",
+    "solution_provided": "решение предложено",
+    "farewell": "прощание",
+}
+
 
 def _format_markdown(result: dict) -> str:
-    """Render the analysis contract as readable chat markdown."""
+    """Render the analysis contract as readable chat markdown (Russian)."""
     header = "## 📞 Анализ звонка"
     if result.get("elapsed_s") is not None:
         header += f" _(обработка {result['elapsed_s']} с)_"
     lines = [header]
+
     lines.append("\n### Транскрипт")
     for seg in result["transcript"]:
-        lines.append(f"- **{seg['speaker']}** [{seg['start']:.1f}–{seg['end']:.1f}s]: {seg['text']}")
+        lines.append(f"- **{seg['speaker']}** [{seg['start']:.1f}–{seg['end']:.1f} с]: {seg['text']}")
+
     c = result["classification"]
-    lines.append(f"\n### Классификация\n- Тема: **{c['topic']}** · Приоритет: **{c['priority']}**")
+    priority = _PRIORITY_RU.get(c["priority"], c["priority"])
+    lines.append(f"\n### Классификация\n- Тема: **{c['topic']}** · Приоритет: **{priority}**")
+
     q = result["quality_score"]
-    checks = " · ".join(f"{k}: {'✅' if v else '❌'}" for k, v in q["checklist"].items())
-    lines.append(f"\n### Качество: **{q['total']}/100**\n- {checks}")
+    checks = " · ".join(
+        f"{_CHECKLIST_RU.get(k, k)}: {'✅' if v else '❌'}" for k, v in q["checklist"].items()
+    )
+    lines.append(f"\n### Качество обслуживания: **{q['total']}/100**\n- {checks}")
+
     comp = result["compliance"]
-    lines.append(f"\n### Compliance: {'✅ passed' if comp['passed'] else '❌ issues'}")
+    lines.append(f"\n### Комплаенс: {'✅ нарушений нет' if comp['passed'] else '❌ есть нарушения'}")
     if comp["issues"]:
         lines.append("\n".join(f"  - {i}" for i in comp["issues"]))
+
     lines.append(f"\n### Резюме\n{result['summary']}")
-    lines.append("\n### Action items\n" + "\n".join(f"- {a}" for a in result["action_items"]))
+
+    items = result["action_items"]
+    body = "\n".join(f"- {a}" for a in items) if items else "- нет"
+    lines.append(f"\n### Задачи после звонка\n{body}")
+
+    if result.get("agent_errors"):
+        lines.append("\n> ⚠️ Часть агентов не отработала: " + "; ".join(result["agent_errors"]))
     return "\n".join(lines)
 
 
