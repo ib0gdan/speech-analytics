@@ -13,6 +13,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from . import metrics
 from .agents.supervisor import run_agents
 from .asr.audio import decode_waveform, fetch_audio
 from .asr.diarizer import diarize
@@ -67,4 +68,8 @@ def run_analysis(
         segments=len(transcript), elapsed_s=result["elapsed_s"],
         topic=result["classification"]["topic"],
     )
+    # Single instrumentation point (design A): pipelines (chat) and api (REST) both call this
+    # function, and mtbank.batch.run_batch_analysis calls it per source — so this one line
+    # covers all three surfaces without duplicating the increment anywhere else.
+    metrics.record_analysis(result, result["elapsed_s"])
     return result

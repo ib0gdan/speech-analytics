@@ -7,3 +7,5 @@ requests==2.32.3
 # and onnxruntime (built-in Silero VAD). numpy powers our pyannote-free diarizer.
 faster-whisper==1.1.1
 numpy==2.2.1
+# Prometheus text-exposition client for mtbank/metrics.py (BONUS-B-METRICS).
+prometheus-client==0.21.1

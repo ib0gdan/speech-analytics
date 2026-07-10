@@ -10,7 +10,7 @@ USER root
 
 COPY api/requirements.txt /tmp/asr-requirements.txt
 RUN pip install --no-cache-dir --retries 5 --timeout 60 \
-        faster-whisper==1.1.1 numpy==2.2.1 requests==2.32.3 \
+        faster-whisper==1.1.1 numpy==2.2.1 requests==2.32.3 prometheus-client==0.21.1 \
     && rm -f /tmp/asr-requirements.txt
 
 # Whisper models land here; docker-compose mounts a shared volume so they survive restarts
