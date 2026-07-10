@@ -134,8 +134,18 @@ docker compose up -d
 резюме и action items.
 
 > **Почему `http://files/…`, а не `localhost`?** Аудио скачивает контейнер `pipelines`, и для
-> него `localhost` — это он сам. `files` — имя сервиса в docker-сети. Внешние ссылки
-> (`https://...`) работают как обычно.
+> него `localhost` — это он сам. `files` — имя сервиса в docker-сети.
+
+Работает и **любая внешняя прямая ссылка** на аудио (`wav`, `mp3`, `ogg`, `m4a`, `flac`).
+Тестовые записи лежат в репозитории публично — их можно вставить в чат на живом демо:
+
+```
+https://raw.githubusercontent.com/ib0gdan/speech-analytics/main/test_data/call_card_blocked.mp3
+https://raw.githubusercontent.com/ib0gdan/speech-analytics/main/test_data/call_transfer_issue.wav
+https://raw.githubusercontent.com/ib0gdan/speech-analytics/main/test_data/call_complaint_escalation.ogg
+```
+
+(второй файл — телефонный канал 8 кГц µ-law)
 
 Без ссылки на аудио пайплайн отвечает как обычный ассистент через Groq — удобно проверить,
 что LLM-бэкенд жив.
