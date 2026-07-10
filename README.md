@@ -662,11 +662,27 @@ cloudflared tunnel --url http://localhost:8080
 туннель — Prometheus скрейпит его внутри compose-сети, а публичная витрина метрик — это
 курируемый дашборд Grafana.
 
-### Вариант 3 — all-in-one образ
+### Вариант 3 — all-in-one образ (Hugging Face Spaces) — **основной живой демо-адрес**
 
-В `deploy/hf/` лежит **all-in-one образ** (все сервисы в одном контейнере за nginx, порт из
-`$PORT`) — для платформ, дающих ровно один контейнер и один порт (Render, Cloud Run, HF Spaces).
-Проверен на Render: `api` поднимается, OpenWebUI на free-тарифе (512 МБ) — нет.
+В `deploy/hf/` лежит **all-in-one образ**: все сервисы в одном контейнере за nginx на порту 7860
+(`app_port` HF Spaces). Для платформ, дающих ровно один контейнер и один порт. Space держит всего
+два файла — `Dockerfile` + `README.md`; образ при сборке клонирует публичный репозиторий, поэтому
+всегда собирает свежий код.
+
+Живое демо: **<https://ibogdan-dev-speech-analytics.hf.space>** (HF Spaces, Docker, CPU Basic —
+2 vCPU / 16 ГБ, бесплатно, постоянный HTTPS-адрес без включённого рабочего ноутбука).
+
+Один контейнер под supervisord поднимает openwebui + pipelines + api + nginx, **а также
+Prometheus и Grafana** — так дашборд метрик (Бонус B) доступен прямо на живом демо:
+
+- Чат: корневой URL, модель **MTBank Call Analytics**, ссылка на аудио. Вшитые записи — на
+  `/files/…` (демо самодостаточно).
+- REST: `POST /analyze`, `POST /analyze-batch`, `GET /health`, `/docs`.
+- Дашборд: **`/grafana/`** (анонимный Viewer). Prometheus в том же контейнере скрейпит оба
+  `/metrics` по loopback — метрики чата и REST суммируются, как в compose-варианте.
+
+Секрет `GROQ_API_KEY` задаётся в Space → Settings → Variables and secrets. Без него ASR и
+дашборд работают, а LLM-агенты деградируют до безопасных значений (`agent_errors` в ответе).
 
 ---
 
