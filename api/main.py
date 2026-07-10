@@ -10,9 +10,9 @@ from __future__ import annotations
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 
-from mtbank import __version__
+from mtbank import __version__, metrics
 from mtbank.analysis import run_analysis
 from mtbank.asr.transcriber import warmup
 from mtbank.batch import run_batch_analysis
@@ -39,6 +39,13 @@ app = FastAPI(title="MTBank Call Analytics API", version=__version__, lifespan=l
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "service": "mtbank-api", "version": __version__}
+
+
+@app.get("/metrics")
+def get_metrics() -> Response:
+    # Prometheus scrape target #1 — the REST path's registry (BONUS-B-METRICS).
+    body, content_type = metrics.render()
+    return Response(content=body, media_type=content_type)
 
 
 @app.post("/analyze")

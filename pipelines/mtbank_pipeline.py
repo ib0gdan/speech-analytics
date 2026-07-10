@@ -19,6 +19,7 @@ from typing import List, Union, Generator, Iterator
 import requests
 from pydantic import BaseModel
 
+from mtbank import metrics
 from mtbank.analysis import run_analysis  # shared core, mounted at /app/mtbank
 from mtbank.batch import run_batch_analysis
 from mtbank.errors import AnalysisError
@@ -177,6 +178,17 @@ class Pipeline:
             print(f"[{self.name}] whisper '{self.valves.WHISPER_MODEL}' preloaded")
         except Exception as e:  # noqa: BLE001 — a warm-up failure must never block startup
             print(f"[{self.name}] whisper preload failed: {e}")
+
+        # Prometheus scrape target #2 — the chat path's registry lives in THIS process, and
+        # OpenWebUI's own FastAPI app exposes no route we can hook, so we start a tiny
+        # in-process exporter instead. Same guard style as the warmup above: a port clash or
+        # exporter failure (e.g. the pipelines server reloading this module twice) must never
+        # block the chat.
+        try:
+            metrics.start_exporter(int(os.getenv("METRICS_PORT", "9100")))
+            print(f"[{self.name}] metrics exporter started on :9100")
+        except Exception as e:  # noqa: BLE001
+            print(f"[{self.name}] metrics exporter failed: {e}")
 
     async def on_shutdown(self):
         print(f"[{self.name}] on_shutdown")
