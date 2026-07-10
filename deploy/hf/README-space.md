@@ -20,7 +20,9 @@ pinned: false
   ссылку на аудио. Демо-записи вшиты в образ — например `<этот-URL>/files/call_dialog.mp3`.
   Несколько ссылок в одном сообщении → анализ трендов по серии.
 - **REST:** `POST /analyze` (multipart `file` или JSON `{"url": "..."}`),
-  `POST /analyze-batch` (`{"urls": [...]}`), `GET /health`, `GET /metrics` (Prometheus).
+  `POST /analyze-batch` (`{"urls": [...]}`), `GET /health`.
+- **Дашборд метрик (Grafana):** `<этот-URL>/grafana/` — количество звонков, quality_score,
+  топ тематик (анонимный просмотр, без входа).
 
 **Нужен секрет:** задайте `GROQ_API_KEY` в **Settings → Variables and secrets** — без него
 ASR отработает, а LLM-агенты деградируют до безопасных значений (в ответе будет `agent_errors`).

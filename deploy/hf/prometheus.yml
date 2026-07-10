@@ -1,0 +1,16 @@
+# HF Spaces variant: everything runs in ONE container, so Prometheus scrapes both /metrics
+# endpoints over loopback (api on :8000, the pipelines exporter on :9100) instead of the compose
+# service names. Same two jobs as deploy/prometheus/prometheus.yml, so the dashboard's
+# `sum by (...)` queries are unchanged — it still merges the chat (pipelines) and REST (api)
+# registries into the true total.
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: mtbank-api
+    static_configs:
+      - targets: ["127.0.0.1:8000"]
+
+  - job_name: mtbank-pipelines
+    static_configs:
+      - targets: ["127.0.0.1:9100"]

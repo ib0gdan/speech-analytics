@@ -7,7 +7,7 @@ FROM ghcr.io/open-webui/open-webui:main
 USER root
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        nginx supervisor git ffmpeg \
+        nginx supervisor git ffmpeg wget ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # --- External OpenWebUI Pipelines server ---
@@ -37,6 +37,28 @@ RUN cp /opt/app/pipelines/mtbank_pipeline.py /pipelines/pipelines/mtbank_pipelin
     && mkdir -p /app/backend/data /pipelines/pipelines /var/log/supervisor \
     && chmod -R 777 /app/backend/data /pipelines /var/lib/nginx /var/log/nginx /var/log/supervisor
 
+# --- Bonus B: Grafana + Prometheus in the SAME container (HF gives one container/one port) ---
+# Standalone tarballs with arch auto-detection so the image builds identically on a local arm64
+# Mac and on HF's amd64 builders. Prometheus scrapes both /metrics endpoints over loopback
+# (api:8000, pipelines:9100); Grafana serves the provisioned dashboard at /grafana/ via nginx.
+ARG PROM_VER=2.55.1
+ARG GRAFANA_VER=11.4.0
+RUN ARCH="$(dpkg --print-architecture)" \
+    && wget -qO /tmp/prom.tar.gz "https://github.com/prometheus/prometheus/releases/download/v${PROM_VER}/prometheus-${PROM_VER}.linux-${ARCH}.tar.gz" \
+    && tar xzf /tmp/prom.tar.gz -C /tmp \
+    && mv /tmp/prometheus-${PROM_VER}.linux-${ARCH}/prometheus /usr/local/bin/prometheus \
+    && mv /tmp/prometheus-${PROM_VER}.linux-${ARCH}/promtool /usr/local/bin/promtool \
+    && wget -qO /tmp/grafana.tar.gz "https://dl.grafana.com/oss/release/grafana-${GRAFANA_VER}.linux-${ARCH}.tar.gz" \
+    && tar xzf /tmp/grafana.tar.gz -C /opt \
+    && mv /opt/grafana-v${GRAFANA_VER} /usr/share/grafana \
+    && rm -rf /tmp/prom* /tmp/grafana* \
+    && mkdir -p /etc/prometheus /var/lib/prometheus /etc/grafana/provisioning /var/lib/grafana/dashboards \
+    && cp /opt/app/deploy/hf/prometheus.yml /etc/prometheus/prometheus.yml \
+    && cp -r /opt/app/deploy/grafana/provisioning/* /etc/grafana/provisioning/ \
+    && cp /opt/app/deploy/grafana/dashboards/mtbank.json /var/lib/grafana/dashboards/mtbank.json \
+    && sed -i 's#http://prometheus:9090#http://127.0.0.1:9090#' /etc/grafana/provisioning/datasources/datasource.yml \
+    && chmod -R 777 /var/lib/prometheus /var/lib/grafana
+
 # PYTHONPATH makes `mtbank` importable by BOTH the api process and the pipeline module.
 # Note: PORT is deliberately NOT set — OpenWebUI defaults to 8080, and nginx listens on 7860
 # (the HF app_port). Forcing a shared PORT would make them fight over one port.
@@ -52,10 +74,18 @@ ENV PYTHONPATH=/opt/app \
     HF_HOME=/models \
     ENABLE_OLLAMA_API=false \
     RAG_EMBEDDING_ENGINE=openai \
-    AUDIO_STT_ENGINE=openai
-# The last three trim ~360 MiB: OpenWebUI otherwise loads torch + a local embedding model for
-# document RAG and its own whisper for voice input — none of which we use (our ASR lives in the
-# pipeline). Mirrors the docker-compose.yml OpenWebUI env.
+    AUDIO_STT_ENGINE=openai \
+    GF_SERVER_HTTP_ADDR=127.0.0.1 \
+    GF_SERVER_HTTP_PORT=3000 \
+    GF_SERVER_SERVE_FROM_SUB_PATH=true \
+    GF_SERVER_ROOT_URL=http://localhost:3000/grafana/ \
+    GF_AUTH_ANONYMOUS_ENABLED=true \
+    GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer \
+    GF_ANALYTICS_REPORTING_ENABLED=false \
+    GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+# The RAG/STT trio trims ~360 MiB: OpenWebUI otherwise loads torch + a local embedding model and
+# its own whisper — none of which we use (our ASR lives in the pipeline). The GF_ vars serve the
+# provisioned dashboard read-only (anonymous Viewer) under the /grafana/ sub-path (Bonus B).
 
 EXPOSE 7860
 CMD ["/start.sh"]
