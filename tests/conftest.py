@@ -43,6 +43,13 @@ DEFAULT_RESPONSES: dict[str, dict] = {
         "summary": "Клиент спросил про кредит. Оператор назвал ставку.",
         "action_items": ["Отправить условия на email"],
     },
+    "trends": {
+        "patterns": ["Клиенты часто жалуются на списания"],
+        "causes": ["Недостаточно информирования об условиях"],
+        "recommendations": ["Обучить операторов disclaimer"],
+        "grouped_action_items": ["Отправить условия кредита"],
+        "grouped_compliance_issues": ["Отсутствует disclaimer о решении банка"],
+    },
 }
 
 
