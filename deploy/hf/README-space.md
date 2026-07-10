@@ -10,12 +10,19 @@ pinned: false
 
 # MTBank Call Analytics — live demo
 
-OpenWebUI chat + REST `POST /analyze` for contact-center call analytics
-(ASR + Оператор/Клиент diarization + 4 LLM agents). Source:
-https://github.com/ib0gdan/speech-analytics
+Речевая аналитика звонков контакт-центра: ASR + диаризация Оператор/Клиент + LLM-агенты.
+Один звонок разбирают четыре агента (классификация, качество, compliance, резюме), серию
+звонков — пятый агент трендов. Доступно и в чате OpenWebUI, и по REST.
 
-- Chat UI: open this Space's root URL, pick the **MTBank Call Analytics** model,
-  paste an audio URL.
-- REST: `POST /analyze` (multipart `file` or JSON `{"url": "..."}`), `GET /health`.
+Исходники и подробный README: https://github.com/ib0gdan/speech-analytics
 
-**Secret required:** set `GROQ_API_KEY` in the Space **Settings → Variables and secrets**.
+- **Чат:** откройте корневой URL Space, выберите модель **MTBank Call Analytics** и вставьте
+  ссылку на аудио. Демо-записи вшиты в образ — например `<этот-URL>/files/call_dialog.mp3`.
+  Несколько ссылок в одном сообщении → анализ трендов по серии.
+- **REST:** `POST /analyze` (multipart `file` или JSON `{"url": "..."}`),
+  `POST /analyze-batch` (`{"urls": [...]}`), `GET /health`, `GET /metrics` (Prometheus).
+
+**Нужен секрет:** задайте `GROQ_API_KEY` в **Settings → Variables and secrets** — без него
+ASR отработает, а LLM-агенты деградируют до безопасных значений (в ответе будет `agent_errors`).
+
+> Первый запуск прогревает whisper (~500 МБ, ≈70 с) — до появления модели анализ ждёт.

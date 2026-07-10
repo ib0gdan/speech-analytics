@@ -1,0 +1,14 @@
+# Never bake secrets or local cruft into an image build context.
+.env
+.env.*
+.git
+.planning
+.claude
+models
+**/__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
+htmlcov
+.coverage
