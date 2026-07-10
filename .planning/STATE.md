@@ -5,8 +5,8 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Deployed Skeleton (End-to-End Vertical Slice
 status: planning
-stopped_at: "Phase 1 infra up locally: OpenWebUI + Pipelines + Groq skeleton pipe, chat verified end-to-end"
-last_updated: "2026-07-08T16:16:55.102Z"
+stopped_at: "Проект завершён: 23/23 требований, 44 теста, демо через Cloudflare Tunnel. Осталось: письмо на azubik@mtbank.by + решение по постоянному адресу демо (туннель vs VPS ~150р)"
+last_updated: "2026-07-10T13:14:52.802Z"
 last_activity: 2026-07-08
 last_activity_desc: Roadmap created from verified spike architecture (MANIFEST.md, CONVENTIONS.md)
 progress:
@@ -91,6 +91,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-08T16:16:55.095Z
-Stopped at: Phase 1 infra up locally: OpenWebUI + Pipelines + Groq skeleton pipe, chat verified end-to-end
-Resume file: .planning/phases/01-deployed-skeleton-end-to-end-vertical-slice/01-CONTEXT.md
+Last session: 2026-07-10T13:14:52.794Z
+Stopped at: Проект завершён: 23/23 требований, 44 теста, демо через Cloudflare Tunnel. Осталось: письмо на azubik@mtbank.by + решение по постоянному адресу демо (туннель vs VPS ~150р)
+Resume file: README.md
