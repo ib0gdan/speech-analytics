@@ -13,6 +13,13 @@ services:
       - ENABLE_OPENAI_API=true
       - OPENAI_API_BASE_URL=http://pipelines:9099   # pipelines server = the "OpenAI" backend
       - OPENAI_API_KEY=${PIPELINES_API_KEY:-0p3n-w3bu!}
+      # Trim ~1 GiB: OpenWebUI otherwise loads torch + two local embedding models for document
+      # RAG and its own whisper for voice input. We use none of that — our ASR is in `pipelines`.
+      - RAG_EMBEDDING_ENGINE=openai
+      - AUDIO_STT_ENGINE=openai
+      - ENABLE_OLLAMA_API=false
+      - OLLAMA_BASE_URL=            # silence retries to a host we don't run
+      - RAG_EMBEDDING_MODEL_AUTO_UPDATE=false
     volumes:
       - openwebui-data:/app/backend/data
     depends_on:

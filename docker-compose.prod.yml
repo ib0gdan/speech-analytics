@@ -28,6 +28,12 @@ services:
       - OPENAI_API_BASE_URL=http://pipelines:9099
       - OPENAI_API_KEY=${PIPELINES_API_KEY:-0p3n-w3bu!}
       - WEBUI_URL=https://${SITE_ADDRESS}
+      # Trim ~360 MiB: skip torch + local embedding models + OpenWebUI's own whisper.
+      - RAG_EMBEDDING_ENGINE=openai
+      - AUDIO_STT_ENGINE=openai
+      - ENABLE_OLLAMA_API=false
+      - OLLAMA_BASE_URL=
+      - RAG_EMBEDDING_MODEL_AUTO_UPDATE=false
     volumes:
       - openwebui-data:/app/backend/data
     depends_on:
