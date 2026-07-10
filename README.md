@@ -505,7 +505,14 @@ docker compose --profile metrics up -d --build
 Дашборд **«MTBank Call Analytics»** появляется в Grafana сам, без единого клика (provisioned
 datasource + provisioned dashboard JSON):
 
-- Grafana: <http://localhost:3001> (анонимный Viewer, авторизация не нужна)
+- Grafana: <http://localhost:3001/grafana/> (анонимный Viewer, авторизация не нужна). Grafana
+  поднята с `GF_SERVER_SERVE_FROM_SUB_PATH=true`, поэтому приложение теперь живёт под `/grafana/`;
+  голый `http://localhost:3001/` сам редиректит (301) на `/grafana/`.
+- Через туннель (Вариант 2) дашборд доступен на том же публичном порту:
+  <http://localhost:8080/grafana/>, а значит и на живом демо —
+  `https://<случайное-имя>.trycloudflare.com/grafana/`. Хост в `root_url` не важен: Grafana
+  вставляет `<base href="/grafana/">` и отдаёт относительные пути до ассетов, так что рендер не
+  зависит от Host-заголовка (проверено: чужой Host отдаёт 200 без редиректа на localhost).
 - Prometheus targets: <http://localhost:9090/targets> — оба job'а (`mtbank-api`,
   `mtbank-pipelines`) должны быть `up`
 
@@ -618,6 +625,14 @@ cloudflared tunnel --url http://localhost:8080
 Выведет адрес вида `https://<случайное-имя>.trycloudflare.com`. Вебсокеты OpenWebUI через
 туннель работают (проверено). Ограничения: адрес меняется при перезапуске, а машина должна быть
 включена.
+
+Тот же nginx `proxy` теперь отдаёт и дашборд `/grafana/` (см. раздел про Grafana выше), и весь
+пакет маршрутов `/analyze*` — включая `/analyze-batch` (Бонус A): раньше `location = /analyze`
+был точным совпадением и `/analyze-batch` тихо проваливался в catch-all OpenWebUI (405), сейчас
+это префиксный `location /analyze`, покрывающий всё семейство. Прод-версия на Caddy (`/analyze*`
+матчер) исправлена тем же способом. Сырой `GET /metrics` api **намеренно не публикуется** через
+туннель — Prometheus скрейпит его внутри compose-сети, а публичная витрина метрик — это
+курируемый дашборд Grafana.
 
 ### Вариант 3 — all-in-one образ
 
